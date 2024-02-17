@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <limits.h>
 
 void print_usage()
 {
@@ -14,6 +15,9 @@ void print_as_bit(int decimal)
 	
 	if (decimal == 0) {
 		printf("0\n");
+	} else if (decimal < 0) {
+		fprintf(stderr, "Input is overflow or negative number\n");
+		exit(1);
 	} else {
 		int bit_digit = log2(decimal) + 1;
 		int *ans_bit = malloc(sizeof(int) * bit_digit);
@@ -39,6 +43,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	int decimal = atoi(argv[1]);
+	printf("input is %d\n", decimal);
 
 	print_as_bit(decimal);
 
