@@ -1,8 +1,2 @@
-*
-!*/
-!*.*
-!hcc
-*.o
-.gdb_history
-!Makefile
+build/*
 obj/*
