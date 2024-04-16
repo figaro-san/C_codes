@@ -1,6 +1,0 @@
-*
-!*/
-!*.*
-*.o
-.gdb_history
-!Makefile
