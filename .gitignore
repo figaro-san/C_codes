@@ -2,3 +2,7 @@
 !*/
 !*.*
 !hcc
+*.o
+.gdb_history
+!Makefile
+obj/*
