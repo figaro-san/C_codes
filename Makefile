@@ -22,10 +22,19 @@ multi_free.o : multi_free.c libpersonal.h
 
 
 
+bit_extend_example : bit_extend_example.o libpersonal.o
+	$(CC) $^ -o $@ $(CFLAGS)
+	mv *.o obj
+	mv $@ build
+bit_extend_example.o : bit_extend_example.c libpersonal.h
+	$(CC) $(INCLUDES) -c $<
+
+
+
 libpersonal.o : libpersonal.c libpersonal.h
 	$(CC) $(INCLUDES) -c $<
 
 
 
-clear : 
+clearn : 
 	rm -f obj/*
