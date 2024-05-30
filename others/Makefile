@@ -36,5 +36,5 @@ libpersonal.o : libpersonal.c libpersonal.h
 
 
 
-clearn : 
+clean : 
 	rm -f obj/*
