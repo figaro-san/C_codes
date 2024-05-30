@@ -1,3 +1,4 @@
+/* this client program is unfinished */
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -7,8 +8,6 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <stdio.h>
-/* this client program is unfinished */
-
 #include <unistd.h>
 
 void recv_message(int sockfd) {
