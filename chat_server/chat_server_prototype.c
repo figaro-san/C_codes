@@ -33,10 +33,10 @@ typedef struct {
 client_t *clients[MAX_CLIENTS];
 
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-static char topic[BUFFER_SIZE/2];
-
 pthread_mutex_t topic_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+//static char topic[BUFFER_SIZE/2];
+static char topic[BUFFER_SIZE];
 
 
 
@@ -72,7 +72,7 @@ void send_message_all(char *s) {
 	for (int i = 0; i < MAX_CLIENTS; i++) {
 		if (clients[i]) {
 			if (write(clients[i]->connfd, s, strlen(s)) < 0) {
-				fprintf(stderr, "[+] Error: %s\n", strerror(errno));
+				fprintf(stderr, "[+] Error at send_message_all(): %s\n", strerror(errno));
 				break;
 			}
 		}
@@ -186,7 +186,8 @@ void queue_delete(int uid) {
 /* クライアントとの通信を操作する */
 void* handle_client(void* arg) {
 	char buff_out[BUFFER_SIZE];
-	char buff_in[BUFFER_SIZE/2];
+	//char buff_in[BUFFER_SIZE/2];
+	char buff_in[BUFFER_SIZE];
 	int rlen;
 
 	cli_count++;
@@ -210,6 +211,7 @@ void* handle_client(void* arg) {
 	send_message_self("<< see /help for assistance\r\n", cli->connfd);
 
 	/* クライアントからの入力を受け取る */
+	/* ここで、buff_inのサイズ-1までを受け取るようにしているので、この後のオーバーフローは考慮しなくとも良い? */
 	while ((rlen = read(cli->connfd, buff_in, sizeof(buff_in)-1)) > 0) {
 		buff_in[rlen] = '\0';
 		buff_out[0] = '\0';
@@ -255,7 +257,7 @@ void* handle_client(void* arg) {
 				if (param) {
 					char *old_name = _strdup(cli->name);
 					if (!old_name) {
-						fprintf(stderr, "Cannot allocate memory");
+						fprintf(stderr, "[+] Error: Cannot allocate memory");
 						continue;
 					}
 					strncpy(cli->name, param, sizeof(cli->name));
@@ -275,7 +277,7 @@ void* handle_client(void* arg) {
 					int uid = atoi(param);
 					param = strtok(NULL, " ");
 					if (param) {
-						sprintf(buff_out, "[PM][%s]", cli->name);
+						sprintf(buff_out, "[Private Message from %s]", cli->name);
 						while (param != NULL) {
 							strcat(buff_out, " ");
 							strcat(buff_out, param);
@@ -301,7 +303,7 @@ void* handle_client(void* arg) {
 				strcat(buff_out, "<< /ping	Server test\r\n");
 				strcat(buff_out, "<< /topic	<message> Set chat topic\r\n");
 				strcat(buff_out, "<< /nick	<name> Change nickname\r\n");
-				strcat(buff_out, "<< /msg	<reference> <message> Send private message\r\n");
+				strcat(buff_out, "<< /msg\t<reference> <message> Send private message\r\n");
 				strcat(buff_out, "<< /list	Show active clients\r\n");
 				strcat(buff_out, "<< /help	Show helo\r\n");
 				send_message_self(buff_out, cli->connfd);
@@ -419,6 +421,7 @@ int main(void) {
 		sprintf(cli->name, "%d", cli->uid);
 
 		queue_add(cli);
+
 		/* スレッドの作成 */
 		pthread_create(&tid, NULL, &handle_client, (void *)cli);
 
