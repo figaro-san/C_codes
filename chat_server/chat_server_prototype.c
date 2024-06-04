@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <signal.h>
 
 /* 接続を受け付ける最大数 */
 #define MAX_CLIENTS 100
@@ -197,13 +198,16 @@ void* handle_client(void* arg) {
 	print_client_addr(cli->addr);
 	printf(" referenced by %d\n", cli->uid);
 
-	sprintf(buff_out, "<< %s has joind\r\n", cli->name);
-	send_message_all(buff_out);
+	sprintf(buff_out, "<< Your uid is %d\r\n", cli->uid);
+	send_message_self(buff_out, cli->connfd);
+
+	sprintf(buff_out, "[System] %s has joind\r\n", cli->name);
+	send_message_all_without_sender(buff_out, cli->uid);
 
 	pthread_mutex_lock(&topic_mutex);
 	if (strlen(topic)) {
 		buff_out[0] = '\0';
-		sprintf(buff_out, "<< topic: %s\r\n", topic);
+		sprintf(buff_out, "<< current topic: %s\r\n", topic);
 		send_message_self(buff_out, cli->connfd);
 	}
 	pthread_mutex_unlock(&topic_mutex);
@@ -231,7 +235,7 @@ void* handle_client(void* arg) {
 				break;
 
 			} else if (!strcmp(command, "/ping")) {
-				send_message_self("<< pong\r\n", cli->connfd);
+				send_message_self("[System] pong\r\n", cli->connfd);
 
 			} else if (!strcmp(command, "/topic")) {
 				param = strtok(NULL, " ");
@@ -245,7 +249,7 @@ void* handle_client(void* arg) {
 						param = strtok(NULL, " ");
 					}
 					pthread_mutex_unlock(&topic_mutex);
-					sprintf(buff_out, "<< topic changed to: %s\r\n", topic);
+					sprintf(buff_out, "[System] topic changed to: %s\r\n", topic);
 					send_message_all(buff_out);
 
 				} else {
@@ -262,7 +266,7 @@ void* handle_client(void* arg) {
 					}
 					strncpy(cli->name, param, sizeof(cli->name));
 					cli->name[sizeof(cli->name)-1] = '\0';
-					sprintf(buff_out, "<< %s is now known as %s\r\n", old_name, cli->name);
+					sprintf(buff_out, "[System] %s is now known as %s\r\n", old_name, cli->name);
 					free(old_name);
 					send_message_all(buff_out);
 
@@ -277,7 +281,7 @@ void* handle_client(void* arg) {
 					int uid = atoi(param);
 					param = strtok(NULL, " ");
 					if (param) {
-						sprintf(buff_out, "[Private Message from %s]", cli->name);
+						sprintf(buff_out, "[PM][%s]", cli->name);
 						while (param != NULL) {
 							strcat(buff_out, " ");
 							strcat(buff_out, param);
@@ -294,18 +298,18 @@ void* handle_client(void* arg) {
 				}
 
 			} else if (!strcmp(command, "/list")) {
-				sprintf(buff_out, "<< clients %d\r\n", cli_count);
+				sprintf(buff_out, "<< %d clients\r\n", cli_count);
 				send_message_self(buff_out, cli->connfd);
 				send_active_clients(cli->connfd);
 
 			} else if (!strcmp(command, "/help")) {
-				strcat(buff_out, "<< /quit	Quit chatroom\r\n");
-				strcat(buff_out, "<< /ping	Server test\r\n");
-				strcat(buff_out, "<< /topic	<message> Set chat topic\r\n");
-				strcat(buff_out, "<< /nick	<name> Change nickname\r\n");
-				strcat(buff_out, "<< /msg\t<reference> <message> Send private message\r\n");
-				strcat(buff_out, "<< /list	Show active clients\r\n");
-				strcat(buff_out, "<< /help	Show helo\r\n");
+				strcat(buff_out, "<< /quit                        Quit chatroom\r\n");
+				strcat(buff_out, "<< /ping                        Server test\r\n");
+				strcat(buff_out, "<< /topic <message>             Set chat topic\r\n");
+				strcat(buff_out, "<< /nick <name>                 Change nickname\r\n");
+				strcat(buff_out, "<< /msg <reference> <message>   Send private message\r\n");
+				strcat(buff_out, "<< /list                        Show active clients\r\n");
+				strcat(buff_out, "<< /help                        Show help\r\n");
 				send_message_self(buff_out, cli->connfd);
 
 			} else {
@@ -320,7 +324,7 @@ void* handle_client(void* arg) {
 	} 
 
 	/* close connection */
-	sprintf(buff_out, "<< %s has left\r\n", cli->name);
+	sprintf(buff_out, "[System] %s has left\r\n", cli->name);
 	send_message_all(buff_out);
 	close(cli->connfd);
 

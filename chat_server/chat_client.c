@@ -9,23 +9,76 @@
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 
 #define BUFFER_SIZE 2048
 
 static _Atomic int is_connected = 1;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
+void move_cursor_to_right(int x) {
+	printf("\033[%dC", x);
+}
+
+int get_term_size() {
+	struct winsize ws;
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+	return ws.ws_col;
+}
+
+void print_right(char *s) {
+	int term_size = get_term_size();
+	int str_len = strlen(s);
+
+	move_cursor_to_right(term_size - str_len);
+	printf("%s\n", s);
+}
+
+void msg_dump(char *msg) {
+	for (int i = 0; msg[i] != '\0'; i++) {
+		printf("%x ", msg[i]);
+	}
+	puts("");
+}
+
+
 void* recv_msg(void* sockfd) {
 	char buff_in[BUFFER_SIZE];
+	char buff_tmp[BUFFER_SIZE];
+	int tmp_len = 0;
 	int rlen;
 	//printf("in recv_msg: sockfd = %d\n", *(int *)sockfd);
 	
 	while (is_connected) {
+		memset(buff_in, 0, BUFFER_SIZE);
 		rlen = read(*(int *)sockfd, buff_in, sizeof(buff_in)-1);
 
 		if (rlen > 0) {
 	 		buff_in[rlen] = '\0';
-			printf("%s", buff_in);
+
+			int start = 0;
+			for (int i = 0; i < rlen; i++) {
+				if (buff_in[i] == '\r' && buff_in[i+1] == '\n') {
+					strncpy(buff_tmp + tmp_len, buff_in + start, i - start);
+					buff_tmp[tmp_len + i - start] = '\0';
+					//msg_dump(buff_tmp);
+
+					if (buff_tmp[0] == '[') {
+						print_right(buff_tmp);
+					} else {
+						printf("%s\n", buff_tmp);
+					}
+
+					start = i+2;
+					tmp_len = 0;
+					i++;
+				}
+			}
+
+			if (start < rlen) {
+				strncpy(buff_tmp + tmp_len, buff_in + start, rlen - start);
+				tmp_len += rlen - start;
+			}
 
 
 		} else if (rlen == 0) {
@@ -93,13 +146,6 @@ int main(void) {
 			continue;
 		}
 
-		/* \nが残るとstrcmp()が正常に動作しないため、\nを\0にする */
-		msg_len = strlen(buff_out);
-		if (msg_len > 0 && buff_out[msg_len-1] == '\n') {
-			buff_out[msg_len-1] = '\0';
-		}
-
-		/* write() が continue することは望ましくない? */
 		pthread_mutex_lock(&lock);
 		if(is_connected && write(sockfd, buff_out, strlen(buff_out)) < 0){
 			fprintf(stderr, "[+] Error at write(): %s\n", strerror(errno));
