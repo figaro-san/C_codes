@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 2048
 
@@ -34,20 +35,26 @@ void print_right(char *s) {
 	printf("%s\n", s);
 }
 
-void msg_dump(char *msg) {
-	for (int i = 0; msg[i] != '\0'; i++) {
-		printf("%x ", msg[i]);
+int set_nonblocking(int fd) {
+	/* fdにセットされている設定フラグを取り出す */
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1) {
+		return EXIT_FAILURE;
 	}
-	puts("");
-}
 
+	/* フラグのO_NONBLOCKをorで1にする */
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+		return EXIT_FAILURE;
+	}
+
+	return EXIT_SUCCESS;
+}
 
 void* recv_msg(void* sockfd) {
 	char buff_in[BUFFER_SIZE];
 	char buff_tmp[BUFFER_SIZE];
 	int tmp_len = 0;
 	int rlen;
-	//printf("in recv_msg: sockfd = %d\n", *(int *)sockfd);
 	
 	while (is_connected) {
 		memset(buff_in, 0, BUFFER_SIZE);
@@ -61,7 +68,6 @@ void* recv_msg(void* sockfd) {
 				if (buff_in[i] == '\r' && buff_in[i+1] == '\n') {
 					strncpy(buff_tmp + tmp_len, buff_in + start, i - start);
 					buff_tmp[tmp_len + i - start] = '\0';
-					//msg_dump(buff_tmp);
 
 					if (buff_tmp[0] == '[') {
 						print_right(buff_tmp);
@@ -109,16 +115,18 @@ void* recv_msg(void* sockfd) {
 
 int main(void) {
 	int sockfd;
-	struct sockaddr_in serv_addr;
+	int s_retval;
 	char buff_out[BUFFER_SIZE];
-	pthread_t tid;
 	char *command;
-	size_t msg_len;
+	struct sockaddr_in serv_addr;
+	struct timeval tv;
+	pthread_t tid;
+	fd_set rfds;
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd == -1) {
-		fprintf(stderr, "[+] Error: %s\n", strerror(errno));
-		exit(1);
+		fprintf(stderr, "[+] Error at socket(): %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
 	}
 
 	serv_addr.sin_family = AF_INET;
@@ -130,35 +138,63 @@ int main(void) {
 	signal(SIGPIPE, SIG_IGN);
 
 	if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-		fprintf(stderr, "%s\n", strerror(errno));
-		exit(1);
+		fprintf(stderr, "[+] Error at connect(): %s\n", strerror(errno));
+		close(sockfd);
+		exit(EXIT_FAILURE);
 	}
 
 	/* サーバーからのメッセージ処理担当 */
 	pthread_create(&tid, NULL, &recv_msg, &sockfd);
 
+	/* stdinを非ブロッキングにする */
+	if (set_nonblocking(STDIN_FILENO) == EXIT_FAILURE) {
+		fprintf(stderr, "Error at set_nonblocking(): %s\n", strerror(errno));
+		close(sockfd);
+		exit(EXIT_FAILURE);
+	} 
+
 	/* 入力処理担当 */
 	printf("<[ Connected to chat server ]>\n");
 	while(is_connected) {
+		/* stdinの監視、タイムアウトは0.1秒 */
+		FD_ZERO(&rfds);
+		FD_SET(0, &rfds);
+		tv.tv_sec = 0;
+		tv.tv_usec = 100;
 
-		if (fgets(buff_out, sizeof(buff_out), stdin) == NULL) {
-			fprintf(stderr, "[+] Error at fgets()\n");
-			continue;
-		}
-
-		pthread_mutex_lock(&lock);
-		if(is_connected && write(sockfd, buff_out, strlen(buff_out)) < 0){
-			fprintf(stderr, "[+] Error at write(): %s\n", strerror(errno));
+		s_retval = select(1, &rfds, NULL, NULL, &tv);
+		if (s_retval == -1) {
+			fprintf(stderr, "[+] Error at select(): %s\n", strerror(errno));
 			is_connected = 0;
 			close(sockfd);
+			exit(EXIT_FAILURE);
+		} 
+
+		/* stdinにデータが来たときのみ実行する */
+		if (FD_ISSET(STDIN_FILENO, &rfds)) {
+			if (fgets(buff_out, sizeof(buff_out), stdin) == NULL) {
+				fprintf(stderr, "[+] Error at fgets()\n");
+				is_connected = 0;
+				close(sockfd);
+				exit(EXIT_FAILURE);
+
+			}
+
+			pthread_mutex_lock(&lock);
+			if(is_connected && write(sockfd, buff_out, strlen(buff_out)) < 0){
+				fprintf(stderr, "[+] Error at write(): %s\n", strerror(errno));
+				is_connected = 0;
+				close(sockfd);
+				exit(EXIT_FAILURE);
+			}
+			pthread_mutex_unlock(&lock);
 		}
-		pthread_mutex_unlock(&lock);
+
 
 	}
-	/* while()を抜けるのは、必ず is_connected = 0 にする処理のみ */
 
 	pthread_join(tid, NULL);
 	pthread_mutex_destroy(&lock);
 
-	return 0;
+	return EXIT_SUCCESS;
 }
