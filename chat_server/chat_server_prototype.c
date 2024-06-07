@@ -9,11 +9,11 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include "chat.h"
+
 /* 接続を受け付ける最大数 */
 #define MAX_CLIENTS 100
 
-/* 最大バッファサイズ */
-#define BUFFER_SIZE 2048
 
 /* 
  * _Atomic
@@ -86,7 +86,7 @@ void send_message_all(char *s) {
 /* 接続してきたクライアント send_message_clientと似ているが、こちらは */
 void send_message_self(const char *s, int connfd) {
 	if (write(connfd, s, strlen(s)) < 0) {
-		fprintf(stderr, "[+] Error: %s\n", strerror(errno));
+		fprintf(stderr, "[+] Error at send_message_self(): %s\n", strerror(errno));
 		exit(1);
 	}
 }
@@ -123,7 +123,7 @@ void send_message_client(char *s, int uid) {
 		if (clients[i]) {
 			if (clients[i]->uid == uid) {
 				if (write(clients[i]->connfd, s, strlen(s)) < 0) {
-					fprintf(stderr, "[+] Error: %s\n", strerror(errno));
+					fprintf(stderr, "[+] Error at send_message_client(): %s\n", strerror(errno));
 					break;
 				}
 			}
@@ -156,7 +156,7 @@ void send_message_all_without_sender(char *s, int uid) {
 		if (clients[i]) {
 			if (clients[i]->uid != uid) {
 				if (write(clients[i]->connfd, s, strlen(s)) < 0) {
-					fprintf(stderr, "%s\n", strerror(errno));
+					fprintf(stderr, "[+] Error at send_message_all_without_sender(): %s\n", strerror(errno));
 					break;
 				}
 			}
@@ -187,8 +187,7 @@ void queue_delete(int uid) {
 /* クライアントとの通信を操作する */
 void* handle_client(void* arg) {
 	char buff_out[BUFFER_SIZE];
-	//char buff_in[BUFFER_SIZE/2];
-	char buff_in[BUFFER_SIZE];
+	char buff_in[BUFFER_SIZE/2];
 	int rlen;
 
 	cli_count++;

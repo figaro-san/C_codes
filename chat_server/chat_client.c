@@ -12,7 +12,8 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 
-#define BUFFER_SIZE 2048
+#include "chat.h"
+
 
 static _Atomic int is_connected = 1;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -46,8 +47,10 @@ int set_nonblocking(int fd) {
 	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
 		return EXIT_FAILURE;
 	}
+	
+	
 
-	return EXIT_SUCCESS;
+	return EXIT_FAILURE;
 }
 
 void* recv_msg(void* sockfd) {
@@ -116,7 +119,7 @@ void* recv_msg(void* sockfd) {
 int main(void) {
 	int sockfd;
 	int s_retval;
-	char buff_out[BUFFER_SIZE];
+	char buff_out[BUFFER_SIZE/2];
 	char *command;
 	struct sockaddr_in serv_addr;
 	struct timeval tv;
